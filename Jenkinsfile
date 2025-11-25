@@ -10,14 +10,13 @@ pipeline {
     stages {
         stage('Inicio') {
             steps {
-                echo 'Iniciando Pipeline Segura...'
+                echo 'Iniciando Pipeline de Depuración...'
             }
         }
 
         stage('Construcción (Build)') {
             steps {
                 script {
-                    echo '🔨 Construyendo imagen...'
                     sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
                     sh "docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest"
                 }
@@ -27,11 +26,9 @@ pipeline {
         stage('Despliegue (Deploy)') {
             steps {
                 script {
-                    echo '🚀 Desplegando aplicación...'
                     sh "docker stop ${CONTAINER_NAME} || true"
                     sh "docker rm ${CONTAINER_NAME} || true"
-                    
-                    // Lanzamos la app en la red compartida
+
                     sh """
                         docker run -d \
                         --name ${CONTAINER_NAME} \
@@ -46,15 +43,16 @@ pipeline {
         stage('Pentesting (OWASP ZAP)') {
             steps {
                 script {
-                    echo '🕵️ Ejecutando escaneo de vulnerabilidades...'
+                    echo '⏳ Esperando 20 segundos para que la app inicie correctamente...'
+                    sleep 20
 
-                    // 1. Aseguramos que la carpeta exista y esté limpia
+                    echo '🕵️ Preparando directorios...'
                     sh "rm -rf zap_reports"
                     sh "mkdir -p zap_reports"
                     sh "chmod 777 zap_reports"
 
-                    // 2. Ejecutamos ZAP como ROOT (-u 0) para evitar problemas de permisos
-                    // Usamos 'zap-baseline-scan.py' primero, es más rápido y menos propenso a fallar por tiempos
+                    echo '🔥 Iniciando escaneo (sin ocultar errores)...'
+                    // NOTA: He quitado el "|| true" para ver el error real en la consola
                     sh """
                         docker run --rm \
                         -u 0 \
@@ -63,22 +61,21 @@ pipeline {
                         -t zaproxy/zap-stable \
                         zap-baseline-scan.py \
                         -t http://${CONTAINER_NAME}:5000 \
-                        -r zap_report.html \
-                        -I || true
+                        -r zap_report.html
                     """
-
-                    // 3. Verificamos si el archivo se creó (para depuración)
-                    sh "ls -l zap_reports/"
                 }
             }
         }
     }
 
-    // Esta sección se ejecuta siempre al final para guardar los archivos generados
     post {
+        failure {
+            script {
+                echo '❌ El escaneo falló. Mostrando logs de la aplicación para depurar:'
+                sh "docker logs ${CONTAINER_NAME}"
+            }
+        }
         always {
-            echo '📄 Archivando reportes de seguridad...'
-            // Guardamos el reporte HTML para que puedas descargarlo desde Jenkins
             archiveArtifacts artifacts: 'zap_reports/zap_report.html', allowEmptyArchive: true
         }
     }
