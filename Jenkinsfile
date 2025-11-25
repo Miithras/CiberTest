@@ -22,7 +22,8 @@ pipeline {
         stage('Construcción (Build)') {
             steps {
                 script {
-                    sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+                    echo '🔨 Construyendo imagen (Forzando actualización de librerías)...'
+                    sh "docker build --no-cache -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
                     sh "docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest"
                 }
             }
