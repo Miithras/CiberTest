@@ -70,7 +70,7 @@ pipeline {
                         -u 0 \
                         -v /zap/wrk \
                         -t zaproxy/zap-stable \
-                        /zap/zap-baseline.py \
+                        /zap/zap-full.py \
                         -t http://${CONTAINER_NAME}:5000 \
                         -r zap_report.html \
                         -I || true
