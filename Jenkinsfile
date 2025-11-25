@@ -34,7 +34,7 @@ pipeline {
                     sh "docker stop ${CONTAINER_NAME} || true"
                     sh "docker rm ${CONTAINER_NAME} || true"
                     
-                    // debug=False es vital para que funcionen las métricas
+                    // debug=False es vital para las métricas
                     sh """
                         docker run -d \
                         --name ${CONTAINER_NAME} \
@@ -82,33 +82,36 @@ pipeline {
                 script {
                     echo '🔍 Analizando vulnerabilidades en librerías (SCA)...'
                     
-                    // 1. Limpieza y preparación
                     sh "rm -rf dependency-check-report"
                     sh "mkdir -p dependency-check-report"
                     sh "docker rm -f odc-scanner || true"
 
-                    // 2. Ejecutar escáner SIN montar volumen de salida, solo nombre fijo
-                    // Nota: Mantenemos el volumen de entrada (-v ${WORKSPACE}:/src) para que lea el requirements.txt
-                    sh """
-                        docker run \
-                        --name odc-scanner \
-                        -u 0 \
-                        -v ${WORKSPACE}:/src \
-                        owasp/dependency-check \
-                        --scan /src \
-                        --format "HTML" \
-                        --project "Vulnerable App" \
-                        --out /report \
-                        --disableRetireJS \
-                        --disableNodeJS \
-                        --disableYarnAudit || true
-                    """
+                    // MEJORA 1: Creamos un volumen para guardar la base de datos y no descargarla siempre de cero
+                    sh "docker volume create dependency-check-data"
+
+                    // MEJORA 2: Usamos withCredentials para inyectar la API Key de forma segura
+                    withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_KEY')]) {
+                        sh """
+                            docker run \
+                            --name odc-scanner \
+                            -u 0 \
+                            -v ${WORKSPACE}:/src \
+                            -v dependency-check-data:/usr/share/dependency-check/data \
+                            owasp/dependency-check \
+                            --scan /src \
+                            --format "HTML" \
+                            --project "Vulnerable App" \
+                            --out /report \
+                            --nvdApiKey ${NVD_KEY} \
+                            --disableRetireJS \
+                            --disableNodeJS \
+                            --disableYarnAudit || true
+                        """
+                    }
                     
-                    // 3. Extraer el reporte manualmente del contenedor
                     echo '📥 Extrayendo reporte de Dependencias...'
                     sh "docker cp odc-scanner:/report/dependency-check-report.html ./dependency-check-report/dependency-check-report.html"
                     
-                    // 4. Borrar contenedor
                     sh "docker rm odc-scanner"
                 }
             }
