@@ -6,26 +6,13 @@ from prometheus_flask_exporter import PrometheusMetrics
 
 app = Flask(__name__)
 
-# --- CONFIGURACIÓN DE SEGURIDAD (SOLUCIONA RIESGOS MEDIOS/BAJOS DE ZAP) ---
+# --- CONFIGURACIÓN DE SEGURIDAD AVANZADA ---
+# Esto elimina la mayoría de las alertas "Medium" y "Low" de ZAP
 
-# 1. Protección de Cookies (Soluciona "Cookie No HttpOnly Flag" y "SameSite")
-app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,  # Evita que JavaScript lea la cookie (Mitiga XSS)
-    SESSION_COOKIE_SAMESITE='Lax', # Protege contra CSRF básico
-    # SESSION_COOKIE_SECURE=True   # OJO: Solo descomentar si usas HTTPS. En localhost/Docker romperá el login.
-)
-
-# 2. Inyección de Cabeceras de Seguridad HTTP
 @app.after_request
 def add_security_headers(response):
-    # Soluciona "X-Content-Type-Options Header Missing"
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-
-    # Soluciona "Missing Anti-clickjacking Header"
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-
-    # Soluciona "Content Security Policy (CSP) Header Not Set"
-    # Permitimos scripts propios y el CDN de Bootstrap que usas en el HTML
+    # 1. Elimina 'Content Security Policy (CSP) Header Not Set'
+    # Define qué scripts y estilos se pueden cargar (seguridad contra XSS)
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://maxcdn.bootstrapcdn.com; "
@@ -33,8 +20,35 @@ def add_security_headers(response):
         "font-src 'self' https://maxcdn.bootstrapcdn.com; "
         "img-src 'self' data:;"
     )
+    
+    # 2. Elimina 'Missing Anti-clickjacking Header'
+    # Evita que tu web sea metida en un iframe invisible
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    
+    # 3. Elimina 'X-Content-Type-Options Header Missing'
+    # Evita que el navegador ejecute archivos como lo que no son
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    
+    # 4. Elimina 'Permissions Policy Header Not Set'
+    # Bloquea el uso de cámara y micrófono (reduce superficie de ataque)
+    response.headers['Permissions-Policy'] = "geolocation=(), microphone=(), camera=()"
+    
+    # 5. Elimina 'Server Leaks Version Information...'
+    # Borra la cabecera que le dice al hacker qué versión de Python usas
+    response.headers['Server'] = 'SecurityProxy'
+    
+    # 6. Elimina 'Strict-Transport-Security Header Not Set' (HSTS)
+    # Fuerza al navegador a recordar que este sitio debe ser seguro (aunque estemos en HTTP por ahora)
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+
     return response
-# --------------------------------------------------------------------------
+
+# Configuración de Cookies Seguras (Elimina alertas de cookies)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax'
+)
+# ------------------------------------------------
 
 metrics = PrometheusMetrics(app)
 metrics.info('app_info', 'Application info', version='1.0.3')
@@ -223,4 +237,5 @@ def admin():
     ''')
 
 if __name__ == '__main__':
+    # Producción
     app.run(host='0.0.0.0', debug=False)
