@@ -51,27 +51,37 @@ pipeline {
                     echo '⏳ Esperando 10 segundos para que la app inicie...'
                     sleep 10
                     
-                    echo '🕵️ Preparando directorios...'
+                    // 1. Preparar carpeta en Jenkins para recibir el archivo
                     sh "rm -rf zap_reports"
                     sh "mkdir -p zap_reports"
-                    sh "chmod 777 zap_reports"
 
-                    echo '🔥 Ejecutando ZAP Baseline Scan...'
-                    
-                    // CORRECCIÓN FINAL:
-                    // 1. Usamos /zap/zap-baseline.py (que ya verificamos que existe)
-                    // 2. En el flag -r, ponemos /zap/wrk/zap_report.html para obligarlo a guardar en el volumen compartido
+                    // 2. Limpiar cualquier contenedor ZAP previo atascado
+                    sh "docker rm -f zap-scanner || true"
+
+                    echo '🔥 Ejecutando ZAP...'
+                    // TRUCO: 
+                    // - Usamos --name zap-scanner para poder referenciarlo después.
+                    // - Usamos -v /zap/wrk (sin ruta host) para crear un volumen interno temporal donde ZAP pueda escribir.
+                    // - NO usamos --rm, para que el contenedor exista lo suficiente para copiar el archivo.
                     sh """
-                        docker run --rm \
-                        -u 0 \
+                        docker run \
+                        --name zap-scanner \
                         --network ${NETWORK_NAME} \
-                        -v ${WORKSPACE}/zap_reports:/zap/wrk/:rw \
+                        -u 0 \
+                        -v /zap/wrk \
                         -t zaproxy/zap-stable \
                         /zap/zap-baseline.py \
                         -t http://${CONTAINER_NAME}:5000 \
-                        -r /zap/wrk/zap_report.html \
+                        -r zap_report.html \
                         -I || true
                     """
+                    
+                    echo '📥 Extrayendo reporte del contenedor...'
+                    // Copiamos el archivo desde dentro del contenedor hacia la carpeta de Jenkins
+                    sh "docker cp zap-scanner:/zap/wrk/zap_report.html ./zap_reports/zap_report.html"
+                    
+                    // Ahora sí, borramos el contenedor de ZAP
+                    sh "docker rm zap-scanner"
                 }
             }
         }
