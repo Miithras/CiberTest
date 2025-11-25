@@ -10,7 +10,17 @@ pipeline {
         NETWORK_NAME = "red-ciberseguridad"
     }
 
+
+
     stages {
+
+        stage('Limpieza Previa') {
+            steps {
+                // Esto borra todo el código viejo antes de descargar el nuevo
+                cleanWs()
+            }
+        }
+
         stage('Inicio') {
             steps {
                 echo 'Iniciando Pipeline Final - Integrante: Diego Henríquez' 
