@@ -84,22 +84,14 @@ pipeline {
                     sh "mkdir -p dependency-check-report"
                     sh "docker rm -f odc-scanner || true"
 
-                    // 1. Iniciamos contenedor como ROOT (-u 0) para evitar problemas de permisos
+                    // 1. Iniciar contenedor dormido
                     sh "docker run -d -u 0 --name odc-scanner --entrypoint tail owasp/dependency-check -f /dev/null"
 
-                    // 2. Creamos la carpeta de destino
+                    // 2. Crear carpeta y copiar archivo (Ya comprobamos que esto funciona)
                     sh "docker exec odc-scanner mkdir -p /src"
-
-                    // 3. Copiamos el archivo requirements.txt explícitamente
-                    echo '📂 Copiando requirements.txt al escáner...'
                     sh "docker cp ${WORKSPACE}/requirements.txt odc-scanner:/src/requirements.txt"
 
-                    // 4. VERIFICACIÓN (DEBUG): Listamos los archivos para confirmar que llegó
-                    echo '👀 Verificando contenido de /src dentro del contenedor:'
-                    sh "docker exec odc-scanner ls -la /src/"
-                    sh "docker exec odc-scanner cat /src/requirements.txt"
-
-                    // 5. Ejecutamos el escaneo sobre la carpeta /src
+                    // 3. Ejecutar escaneo CON --enableExperimental
                     withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_KEY')]) {
                         sh """
                             docker exec odc-scanner /usr/share/dependency-check/bin/dependency-check.sh \
@@ -110,7 +102,8 @@ pipeline {
                             --nvdApiKey ${NVD_KEY} \
                             --disableRetireJS \
                             --disableNodeJS \
-                            --disableYarnAudit
+                            --disableYarnAudit \
+                            --enableExperimental
                         """
                     }
                     
