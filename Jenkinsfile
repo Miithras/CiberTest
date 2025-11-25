@@ -80,24 +80,28 @@ pipeline {
         stage('Análisis de Dependencias (Dependency Check)') {
             steps {
                 script {
-                    echo '🔍 Analizando vulnerabilidades en librerías (SCA)...'
+                    echo '🔍 Analizando vulnerabilidades (SCA) - Método "Copiar"...'
                     
+                    // 1. Limpieza previa
                     sh "rm -rf dependency-check-report"
                     sh "mkdir -p dependency-check-report"
                     sh "docker rm -f odc-scanner || true"
 
-                    // MEJORA 1: Creamos un volumen para guardar la base de datos y no descargarla siempre de cero
-                    sh "docker volume create dependency-check-data"
+                    // 2. Iniciamos el contenedor en "modo espera" (sin escanear todavía)
+                    // Usamos 'tail -f /dev/null' para mantenerlo encendido mientras copiamos los archivos
+                    sh "docker run -d --name odc-scanner --entrypoint tail owasp/dependency-check -f /dev/null"
 
-                    // MEJORA 2: Usamos withCredentials para inyectar la API Key de forma segura
+                    // 3. Crear carpeta interna
+                    sh "docker exec odc-scanner mkdir -p /src"
+
+                    // 4. EL PASO CRÍTICO: Copiamos requirements.txt desde Jenkins hacia dentro del escáner
+                    // Esto asegura que el archivo ESTÉ ahí, sin importar los problemas de volúmenes
+                    sh "docker cp requirements.txt odc-scanner:/src/requirements.txt"
+
+                    // 5. Ahora sí, ejecutamos el comando de escaneo manualmente dentro del contenedor
                     withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_KEY')]) {
                         sh """
-                            docker run \
-                            --name odc-scanner \
-                            -u 0 \
-                            -v ${WORKSPACE}:/src \
-                            -v dependency-check-data:/usr/share/dependency-check/data \
-                            owasp/dependency-check \
+                            docker exec odc-scanner /usr/share/dependency-check/bin/dependency-check.sh \
                             --scan /src \
                             --format "HTML" \
                             --project "Vulnerable App" \
@@ -105,14 +109,16 @@ pipeline {
                             --nvdApiKey ${NVD_KEY} \
                             --disableRetireJS \
                             --disableNodeJS \
-                            --disableYarnAudit || true
+                            --disableYarnAudit
                         """
                     }
                     
-                    echo '📥 Extrayendo reporte de Dependencias...'
+                    // 6. Extraemos el reporte final
+                    echo '📥 Extrayendo reporte...'
                     sh "docker cp odc-scanner:/report/dependency-check-report.html ./dependency-check-report/dependency-check-report.html"
                     
-                    sh "docker rm odc-scanner"
+                    // 7. Limpieza
+                    sh "docker rm -f odc-scanner"
                 }
             }
         }
