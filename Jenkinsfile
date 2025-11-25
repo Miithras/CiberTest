@@ -47,26 +47,28 @@ pipeline {
             steps {
                 script {
                     echo '🕵️ Ejecutando escaneo de vulnerabilidades...'
-                    
-                    // Creamos un directorio para reportes y damos permisos
+
+                    // 1. Aseguramos que la carpeta exista y esté limpia
+                    sh "rm -rf zap_reports"
                     sh "mkdir -p zap_reports"
                     sh "chmod 777 zap_reports"
 
-                    // Ejecutamos ZAP usando Docker
-                    // -v ${WORKSPACE}/zap_reports:/zap/wrk/:rw -> Mapeamos carpeta para guardar el reporte
-                    // -t http://${CONTAINER_NAME}:5000 -> Atacamos al contenedor por su nombre interno
-                    // -r zap_report.html -> Nombre del reporte
-                    // || true -> Importante: Evita que el Pipeline se detenga si encuentra alertas (queremos ver el reporte)
+                    // 2. Ejecutamos ZAP como ROOT (-u 0) para evitar problemas de permisos
+                    // Usamos 'zap-baseline-scan.py' primero, es más rápido y menos propenso a fallar por tiempos
                     sh """
                         docker run --rm \
+                        -u 0 \
                         --network ${NETWORK_NAME} \
                         -v ${WORKSPACE}/zap_reports:/zap/wrk/:rw \
                         -t zaproxy/zap-stable \
-                        zap-full-scan.py \
+                        zap-baseline-scan.py \
                         -t http://${CONTAINER_NAME}:5000 \
                         -r zap_report.html \
                         -I || true
                     """
+
+                    // 3. Verificamos si el archivo se creó (para depuración)
+                    sh "ls -l zap_reports/"
                 }
             }
         }
