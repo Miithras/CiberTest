@@ -2,8 +2,15 @@ from flask import Flask, request, render_template_string, session, redirect, url
 import sqlite3
 import os
 import hashlib
+from prometheus_flask_exporter import PrometheusMetrics
 
 app = Flask(__name__)
+app = Flask(__name__)
+
+metrics = PrometheusMetrics(app)
+metrics.info('app_info', 'Application info', version='1.0.3')
+
+app.secret_key = os.urandom(24)
 app.secret_key = os.urandom(24)
 
 
