@@ -10,20 +10,20 @@ pipeline {
         NETWORK_NAME = "red-ciberseguridad"
     }
 
-
-
     stages {
-
-        stage('Limpieza Previa') {
+        stage('Limpieza y Checkout') {
             steps {
-                // Esto borra todo el código viejo antes de descargar el nuevo
-                cleanWs()
-            }
-        }
-
-        stage('Inicio') {
-            steps {
-                echo 'Iniciando Pipeline Final - Integrante: Diego Henríquez' 
+                script {
+                    echo '🧹 Limpiando espacio de trabajo...'
+                    cleanWs() // Borra todo lo viejo
+                    
+                    echo '📥 Descargando código actualizado desde GitHub...'
+                    checkout scm // Fuerza la descarga de la última versión
+                    
+                    echo '👀 VERIFICACIÓN DE VERSIONES (LO QUE JENKINS VE):'
+                    // Esto imprimirá en la consola el contenido exacto del archivo
+                    sh "cat requirements.txt" 
+                }
             }
         }
 
@@ -44,6 +44,7 @@ pipeline {
                     sh "docker stop ${CONTAINER_NAME} || true"
                     sh "docker rm ${CONTAINER_NAME} || true"
                     
+                    // debug=False es vital para métricas
                     sh """
                         docker run -d \
                         --name ${CONTAINER_NAME} \
@@ -94,14 +95,16 @@ pipeline {
                     sh "mkdir -p dependency-check-report"
                     sh "docker rm -f odc-scanner || true"
 
-                    // 1. Iniciar contenedor dormido
+                    // Iniciar contenedor
                     sh "docker run -d -u 0 --name odc-scanner --entrypoint tail owasp/dependency-check -f /dev/null"
 
-                    // 2. Crear carpeta y copiar archivo (Ya comprobamos que esto funciona)
+                    // Crear carpeta interna
                     sh "docker exec odc-scanner mkdir -p /src"
-                    sh "docker cp ${WORKSPACE}/requirements.txt odc-scanner:/src/requirements.txt"
 
-                    // 3. Ejecutar escaneo CON --enableExperimental
+                    // Copiar requirements.txt
+                    sh "docker cp ${WORKSPACE}/requirements.txt odc-scanner:/src/requirements.txt"
+                    
+                    // Ejecutar escaneo con Flags Experimentales y desactivando JS
                     withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_KEY')]) {
                         sh """
                             docker exec odc-scanner /usr/share/dependency-check/bin/dependency-check.sh \
