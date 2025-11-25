@@ -1,3 +1,7 @@
+// Integrantes: Diego Henríquez y
+// Sección: OCY1102
+
+
 pipeline {
     agent any
 
@@ -18,7 +22,6 @@ pipeline {
         stage('Construcción (Build)') {
             steps {
                 script {
-                    echo '🔨 Construyendo imagen...'
                     sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
                     sh "docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest"
                 }
@@ -28,7 +31,6 @@ pipeline {
         stage('Despliegue (Deploy)') {
             steps {
                 script {
-                    echo '🚀 Desplegando aplicación...'
                     sh "docker stop ${CONTAINER_NAME} || true"
                     sh "docker rm ${CONTAINER_NAME} || true"
                     
@@ -49,14 +51,16 @@ pipeline {
                     echo '⏳ Esperando 10 segundos para que la app inicie...'
                     sleep 10
                     
-                    echo '🕵️ Preparando directorios para el reporte...'
+                    echo '🕵️ Preparando directorios...'
                     sh "rm -rf zap_reports"
                     sh "mkdir -p zap_reports"
                     sh "chmod 777 zap_reports"
 
                     echo '🔥 Ejecutando ZAP Baseline Scan...'
                     
-                    // CORRECCIÓN: Usamos el nombre correcto encontrado: zap-baseline.py
+                    // CORRECCIÓN FINAL:
+                    // 1. Usamos /zap/zap-baseline.py (que ya verificamos que existe)
+                    // 2. En el flag -r, ponemos /zap/wrk/zap_report.html para obligarlo a guardar en el volumen compartido
                     sh """
                         docker run --rm \
                         -u 0 \
@@ -65,7 +69,7 @@ pipeline {
                         -t zaproxy/zap-stable \
                         /zap/zap-baseline.py \
                         -t http://${CONTAINER_NAME}:5000 \
-                        -r zap_report.html \
+                        -r /zap/wrk/zap_report.html \
                         -I || true
                     """
                 }
@@ -75,8 +79,7 @@ pipeline {
 
     post {
         always {
-            echo '📄 Archivando reporte de seguridad...'
-            // Guardamos el reporte generado
+            echo '📄 Archivando reporte...'
             archiveArtifacts artifacts: 'zap_reports/zap_report.html', allowEmptyArchive: true
         }
     }
