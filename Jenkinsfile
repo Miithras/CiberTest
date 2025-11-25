@@ -85,9 +85,7 @@ pipeline {
                     sh "mkdir -p dependency-check-report"
                     sh "chmod 777 dependency-check-report"
 
-                    // MODIFICACIÓN IMPORTANTE:
-                    // Agregamos --disableRetireJS --disableNodeJS para evitar el error 429 de GitHub
-                    // Así solo se enfocará en Python (requirements.txt)
+                    // CORRECCIÓN: Desactivamos escáneres de JS para evitar bloqueo 429 de GitHub
                     sh """
                         docker run --rm \
                         -u 0 \
