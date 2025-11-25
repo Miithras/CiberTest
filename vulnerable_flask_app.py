@@ -2,12 +2,12 @@ from flask import Flask, request, render_template_string, session, redirect, url
 import sqlite3
 import os
 import hashlib
-# 1. Importación de la librería
+# Importación para monitorización
 from prometheus_flask_exporter import PrometheusMetrics
 
 app = Flask(__name__)
 
-# 2. Configuración de métricas (TIENE QUE IR AQUÍ, ANTES DE LAS RUTAS)
+# Configuración de métricas (Vital para Grafana)
 metrics = PrometheusMetrics(app)
 metrics.info('app_info', 'Application info', version='1.0.3')
 
@@ -49,15 +49,13 @@ def login():
 
         conn = get_db_connection()
 
-        # Vulnerabilidad intencional para la evaluación
-        if "' OR '" in password:
-            query = "SELECT * FROM users WHERE username = '{}' AND password = '{}'".format(
-                username, password)
-            user = conn.execute(query).fetchone()
-        else:
-            query = "SELECT * FROM users WHERE username = ? AND password = ?"
-            hashed_password = hash_password(password)
-            user = conn.execute(query, (username, hashed_password)).fetchone()
+        # --- CORRECCIÓN DE SEGURIDAD ---
+        # Se eliminó la lógica vulnerable que usaba .format()
+        # Ahora SIEMPRE se usa la consulta parametrizada (segura contra SQL Injection)
+        query = "SELECT * FROM users WHERE username = ? AND password = ?"
+        hashed_password = hash_password(password)
+        user = conn.execute(query, (username, hashed_password)).fetchone()
+        # -------------------------------
 
         if user:
             session['user_id'] = user['id']
@@ -131,6 +129,7 @@ def dashboard():
         "SELECT comment FROM comments WHERE user_id = ?", (user_id,)).fetchall()
     conn.close()
 
+    # Nota: render_template_string escapa automáticamente las variables {{ }} protegiendo contra XSS básico
     return render_template_string('''
         <!doctype html>
         <html lang="en">
@@ -170,6 +169,7 @@ def submit_comment():
     user_id = session['user_id']
 
     conn = get_db_connection()
+    # Esta consulta ya era segura (parametrizada), se mantiene igual
     conn.execute(
         "INSERT INTO comments (user_id, comment) VALUES (?, ?)", (user_id, comment))
     conn.commit()
@@ -200,5 +200,5 @@ def admin():
     ''')
 
 if __name__ == '__main__':
-    # 3. Lanzamos la app
-    app.run(host='0.0.0.0', debug=False )
+    # Se establece debug=False para producción y seguridad
+    app.run(host='0.0.0.0', debug=False)
