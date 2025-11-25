@@ -1,4 +1,5 @@
-// Integrantes: Diego Henríquez
+// Integrantes: Diego Henríquez y Diego Morales
+// Asignatura: Ciberseguridad en Desarrollo
 // Sección: OCY1102
 
 pipeline {
@@ -13,24 +14,25 @@ pipeline {
     stages {
         stage('Limpieza y Checkout') {
             steps {
+                // Responsable de gestión de repositorio: Diego Morales
                 script {
-                    echo '🧹 Limpiando espacio de trabajo...'
-                    cleanWs() // Borra todo lo viejo
-                    
+                    echo '🧹 Limpiando espacio de trabajo... (Diego Morales)'
+                    cleanWs()
+
                     echo '📥 Descargando código actualizado desde GitHub...'
-                    checkout scm // Fuerza la descarga de la última versión
-                    
-                    echo '👀 VERIFICACIÓN DE VERSIONES (LO QUE JENKINS VE):'
-                    // Esto imprimirá en la consola el contenido exacto del archivo
-                    sh "cat requirements.txt" 
+                    checkout scm
+
+                    echo '👀 VERIFICACIÓN DE VERSIONES:'
+                    sh "cat requirements.txt"
                 }
             }
         }
 
         stage('Construcción (Build)') {
             steps {
+                // Responsable de construcción de imagen: Diego Henríquez
                 script {
-                    echo '🔨 Construyendo imagen...'
+                    echo '🔨 Construyendo imagen... (Diego Henríquez)'
                     sh "docker build --no-cache -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
                     sh "docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest"
                 }
@@ -39,12 +41,13 @@ pipeline {
 
         stage('Despliegue (Deploy)') {
             steps {
+                // Responsable de despliegue y configuración de red: Diego Morales
                 script {
-                    echo '🚀 Desplegando aplicación...'
+                    echo '🚀 Desplegando aplicación... (Diego Morales)'
                     sh "docker stop ${CONTAINER_NAME} || true"
                     sh "docker rm ${CONTAINER_NAME} || true"
-                    
-                    // debug=False es vital para métricas
+
+                    // Se asegura debug=False para métricas y seguridad
                     sh """
                         docker run -d \
                         --name ${CONTAINER_NAME} \
@@ -58,10 +61,11 @@ pipeline {
 
         stage('Pentesting (OWASP ZAP)') {
             steps {
+                // Responsable de Pruebas Dinámicas (DAST): Diego Henríquez
                 script {
-                    echo '⏳ Esperando 10 segundos...'
+                    echo '⏳ Iniciando pruebas DAST con OWASP ZAP... (Diego Henríquez)'
                     sleep 10
-                    
+
                     sh "rm -rf zap_reports"
                     sh "mkdir -p zap_reports"
                     sh "docker rm -f zap-scanner || true"
@@ -79,7 +83,7 @@ pipeline {
                         -r zap_report.html \
                         -I || true
                     """
-                    
+
                     sh "docker cp zap-scanner:/zap/wrk/zap_report.html ./zap_reports/zap_report.html"
                     sh "docker rm zap-scanner"
                 }
@@ -88,9 +92,10 @@ pipeline {
 
         stage('Análisis de Dependencias (Dependency Check)') {
             steps {
+                // Responsable de Pruebas Estáticas (SCA): Diego Henríquez
                 script {
-                    echo '🔍 Analizando vulnerabilidades (SCA)...'
-                    
+                    echo '🔍 Analizando vulnerabilidades en librerías (SCA)... (Diego Morales)'
+
                     sh "rm -rf dependency-check-report"
                     sh "mkdir -p dependency-check-report"
                     sh "docker rm -f odc-scanner || true"
@@ -103,8 +108,8 @@ pipeline {
 
                     // Copiar requirements.txt
                     sh "docker cp ${WORKSPACE}/requirements.txt odc-scanner:/src/requirements.txt"
-                    
-                    // Ejecutar escaneo con Flags Experimentales y desactivando JS
+
+                    // Ejecutar escaneo con Flags Experimentales
                     withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_KEY')]) {
                         sh """
                             docker exec odc-scanner /usr/share/dependency-check/bin/dependency-check.sh \
@@ -118,11 +123,10 @@ pipeline {
                             --disableYarnAudit \
                             --enableExperimental
                         """
-                    }
-                    
+
                     echo '📥 Extrayendo reporte...'
                     sh "docker cp odc-scanner:/report/dependency-check-report.html ./dependency-check-report/dependency-check-report.html"
-                    
+
                     sh "docker rm -f odc-scanner"
                 }
             }
@@ -131,7 +135,7 @@ pipeline {
 
     post {
         always {
-            echo '📄 Archivando reportes...'
+            echo '📄 Archivando reportes (Diego Henríquez y Diego Morales)...'
             archiveArtifacts artifacts: 'zap_reports/zap_report.html', allowEmptyArchive: true
             archiveArtifacts artifacts: 'dependency-check-report/dependency-check-report.html', allowEmptyArchive: true
         }

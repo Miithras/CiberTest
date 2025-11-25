@@ -1,18 +1,24 @@
+# Integrantes: Diego Henríquez y Diego Morales
+# Asignatura: Ciberseguridad en Desarrollo
+# Sección: OCY1102
+
+
 from flask import Flask, request, render_template_string, session, redirect, url_for
 import sqlite3
 import os
 import hashlib
 from prometheus_flask_exporter import PrometheusMetrics
 
+
+
 app = Flask(__name__)
 
-# --- CONFIGURACIÓN DE SEGURIDAD AVANZADA ---
-# Esto elimina la mayoría de las alertas "Medium" y "Low" de ZAP
+# --- CONFIGURACIÓN DE SEGURIDAD ---
+# Implementado por: Diego Morales
 
 @app.after_request
 def add_security_headers(response):
     # 1. Elimina 'Content Security Policy (CSP) Header Not Set'
-    # Define qué scripts y estilos se pueden cargar (seguridad contra XSS)
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://maxcdn.bootstrapcdn.com; "
@@ -20,36 +26,28 @@ def add_security_headers(response):
         "font-src 'self' https://maxcdn.bootstrapcdn.com; "
         "img-src 'self' data:;"
     )
-    
     # 2. Elimina 'Missing Anti-clickjacking Header'
-    # Evita que tu web sea metida en un iframe invisible
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-    
     # 3. Elimina 'X-Content-Type-Options Header Missing'
-    # Evita que el navegador ejecute archivos como lo que no son
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    
     # 4. Elimina 'Permissions Policy Header Not Set'
-    # Bloquea el uso de cámara y micrófono (reduce superficie de ataque)
     response.headers['Permissions-Policy'] = "geolocation=(), microphone=(), camera=()"
-    
     # 5. Elimina 'Server Leaks Version Information...'
-    # Borra la cabecera que le dice al hacker qué versión de Python usas
     response.headers['Server'] = 'SecurityProxy'
-    
     # 6. Elimina 'Strict-Transport-Security Header Not Set' (HSTS)
-    # Fuerza al navegador a recordar que este sitio debe ser seguro (aunque estemos en HTTP por ahora)
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-
     return response
 
-# Configuración de Cookies Seguras (Elimina alertas de cookies)
+# Configuración de Cookies Seguras
+# Implementado por: Diego Morales
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax'
 )
 # ------------------------------------------------
 
+# Integración de Monitoreo (Prometheus)
+# Implementado por: Diego Henríquez
 metrics = PrometheusMetrics(app)
 metrics.info('app_info', 'Application info', version='1.0.3')
 
@@ -91,10 +89,12 @@ def login():
 
         conn = get_db_connection()
 
-        # Consulta segura (Parametrizada)
+        # --- CORRECCIÓN DE VULNERABILIDAD CRÍTICA (SQL INJECTION) ---
+        # Realizado por: Diego Henríquez
         query = "SELECT * FROM users WHERE username = ? AND password = ?"
         hashed_password = hash_password(password)
         user = conn.execute(query, (username, hashed_password)).fetchone()
+        # ------------------------------------------------------------
 
         if user:
             session['user_id'] = user['id']
@@ -237,5 +237,4 @@ def admin():
     ''')
 
 if __name__ == '__main__':
-    # Producción
     app.run(host='0.0.0.0', debug=False)

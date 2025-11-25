@@ -1,3 +1,7 @@
+# Integrantes: Diego Henríquez y Diego Morales
+# Asignatura: Ciberseguridad en Desarrollo
+# Sección: OCY1102
+
 global:
   scrape_interval: 5s
 
