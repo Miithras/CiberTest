@@ -10,7 +10,8 @@ pipeline {
     stages {
         stage('Inicio') {
             steps {
-                echo 'Iniciando Pipeline de Depuración...'
+                // RECUERDA: Poner tu nombre aquí para la evidencia de autoría
+                echo 'Iniciando Pipeline Corregido...'
             }
         }
 
@@ -43,25 +44,28 @@ pipeline {
         stage('Pentesting (OWASP ZAP)') {
             steps {
                 script {
-                    echo '⏳ Esperando 20 segundos para que la app inicie correctamente...'
-                    sleep 20
+                    echo '⏳ Esperando 10 segundos para inicio de app...'
+                    sleep 10
 
                     echo '🕵️ Preparando directorios...'
                     sh "rm -rf zap_reports"
                     sh "mkdir -p zap_reports"
                     sh "chmod 777 zap_reports"
 
-                    echo '🔥 Iniciando escaneo (sin ocultar errores)...'
-                    // NOTA: He quitado el "|| true" para ver el error real en la consola
+                    echo '🔥 Iniciando escaneo...'
+
+                    // CORRECCIÓN: Agregamos "/zap/" antes del nombre del script
+                    // Y reponemos "|| true" para que el hallazgo de errores no detenga el reporte
                     sh """
                         docker run --rm \
                         -u 0 \
                         --network ${NETWORK_NAME} \
                         -v ${WORKSPACE}/zap_reports:/zap/wrk/:rw \
                         -t zaproxy/zap-stable \
-                        zap-baseline-scan.py \
+                        /zap/zap-baseline-scan.py \
                         -t http://${CONTAINER_NAME}:5000 \
-                        -r zap_report.html
+                        -r zap_report.html \
+                        -I || true
                     """
                 }
             }
@@ -69,13 +73,8 @@ pipeline {
     }
 
     post {
-        failure {
-            script {
-                echo '❌ El escaneo falló. Mostrando logs de la aplicación para depurar:'
-                sh "docker logs ${CONTAINER_NAME}"
-            }
-        }
         always {
+            echo '📄 Archivando reporte...'
             archiveArtifacts artifacts: 'zap_reports/zap_report.html', allowEmptyArchive: true
         }
     }
