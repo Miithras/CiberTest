@@ -34,7 +34,6 @@ pipeline {
                     sh "docker stop ${CONTAINER_NAME} || true"
                     sh "docker rm ${CONTAINER_NAME} || true"
                     
-                    // debug=False es vital para las métricas
                     sh """
                         docker run -d \
                         --name ${CONTAINER_NAME} \
@@ -49,7 +48,7 @@ pipeline {
         stage('Pentesting (OWASP ZAP)') {
             steps {
                 script {
-                    echo '⏳ Esperando 10 segundos para inicio...'
+                    echo '⏳ Esperando 10 segundos...'
                     sleep 10
                     
                     sh "rm -rf zap_reports"
@@ -70,7 +69,6 @@ pipeline {
                         -I || true
                     """
                     
-                    echo '📥 Extrayendo reporte ZAP...'
                     sh "docker cp zap-scanner:/zap/wrk/zap_report.html ./zap_reports/zap_report.html"
                     sh "docker rm zap-scanner"
                 }
@@ -80,25 +78,28 @@ pipeline {
         stage('Análisis de Dependencias (Dependency Check)') {
             steps {
                 script {
-                    echo '🔍 Analizando vulnerabilidades (SCA) - Método "Copiar"...'
+                    echo '🔍 Analizando vulnerabilidades (SCA)...'
                     
-                    // 1. Limpieza previa
                     sh "rm -rf dependency-check-report"
                     sh "mkdir -p dependency-check-report"
                     sh "docker rm -f odc-scanner || true"
 
-                    // 2. Iniciamos el contenedor en "modo espera" (sin escanear todavía)
-                    // Usamos 'tail -f /dev/null' para mantenerlo encendido mientras copiamos los archivos
-                    sh "docker run -d --name odc-scanner --entrypoint tail owasp/dependency-check -f /dev/null"
+                    // 1. Iniciamos contenedor como ROOT (-u 0) para evitar problemas de permisos
+                    sh "docker run -d -u 0 --name odc-scanner --entrypoint tail owasp/dependency-check -f /dev/null"
 
-                    // 3. Crear carpeta interna
+                    // 2. Creamos la carpeta de destino
                     sh "docker exec odc-scanner mkdir -p /src"
 
-                    // 4. EL PASO CRÍTICO: Copiamos requirements.txt desde Jenkins hacia dentro del escáner
-                    // Esto asegura que el archivo ESTÉ ahí, sin importar los problemas de volúmenes
-                    sh "docker cp requirements.txt odc-scanner:/src/requirements.txt"
+                    // 3. Copiamos el archivo requirements.txt explícitamente
+                    echo '📂 Copiando requirements.txt al escáner...'
+                    sh "docker cp ${WORKSPACE}/requirements.txt odc-scanner:/src/requirements.txt"
 
-                    // 5. Ahora sí, ejecutamos el comando de escaneo manualmente dentro del contenedor
+                    // 4. VERIFICACIÓN (DEBUG): Listamos los archivos para confirmar que llegó
+                    echo '👀 Verificando contenido de /src dentro del contenedor:'
+                    sh "docker exec odc-scanner ls -la /src/"
+                    sh "docker exec odc-scanner cat /src/requirements.txt"
+
+                    // 5. Ejecutamos el escaneo sobre la carpeta /src
                     withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_KEY')]) {
                         sh """
                             docker exec odc-scanner /usr/share/dependency-check/bin/dependency-check.sh \
@@ -113,11 +114,9 @@ pipeline {
                         """
                     }
                     
-                    // 6. Extraemos el reporte final
                     echo '📥 Extrayendo reporte...'
                     sh "docker cp odc-scanner:/report/dependency-check-report.html ./dependency-check-report/dependency-check-report.html"
                     
-                    // 7. Limpieza
                     sh "docker rm -f odc-scanner"
                 }
             }
@@ -126,7 +125,7 @@ pipeline {
 
     post {
         always {
-            echo '📄 Archivando todos los reportes...'
+            echo '📄 Archivando reportes...'
             archiveArtifacts artifacts: 'zap_reports/zap_report.html', allowEmptyArchive: true
             archiveArtifacts artifacts: 'dependency-check-report/dependency-check-report.html', allowEmptyArchive: true
         }
