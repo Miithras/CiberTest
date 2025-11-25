@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Mantener las dependencias de Python actualizadas (pip)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+
+  # Mantener las dependencias de Docker actualizadas (Dockerfile)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
