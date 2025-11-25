@@ -1,6 +1,5 @@
-// Integrantes: Diego Henríquez y
+// Integrantes: Diego Henríquez
 // Sección: OCY1102
-
 
 pipeline {
     agent any
@@ -14,15 +13,15 @@ pipeline {
     stages {
         stage('Inicio') {
             steps {
-                // RECUERDA: Cambiar NOMBRE_INTEGRANTE por tu nombre real
-                echo 'Iniciando Pipeline - Integrante: NOMBRE_INTEGRANTE' 
+                echo 'Iniciando Pipeline Final - Integrante: Diego Henríquez' 
             }
         }
 
         stage('Construcción (Build)') {
             steps {
                 script {
-                    echo '🔨 Construyendo imagen (Forzando actualización de librerías)...'
+                    echo '🔨 Construyendo imagen...'
+                    // Mantenemos --no-cache para asegurar actualizaciones
                     sh "docker build --no-cache -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
                     sh "docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest"
                 }
@@ -32,9 +31,11 @@ pipeline {
         stage('Despliegue (Deploy)') {
             steps {
                 script {
+                    echo '🚀 Desplegando aplicación...'
                     sh "docker stop ${CONTAINER_NAME} || true"
                     sh "docker rm ${CONTAINER_NAME} || true"
                     
+                    // IMPORTANTE: debug=False para que funcionen las métricas y Flask sea estable
                     sh """
                         docker run -d \
                         --name ${CONTAINER_NAME} \
@@ -49,21 +50,16 @@ pipeline {
         stage('Pentesting (OWASP ZAP)') {
             steps {
                 script {
-                    echo '⏳ Esperando 10 segundos para que la app inicie...'
+                    echo '⏳ Esperando 10 segundos para inicio...'
                     sleep 10
                     
-                    // 1. Preparar carpeta en Jenkins para recibir el archivo
+                    // Limpieza previa
                     sh "rm -rf zap_reports"
                     sh "mkdir -p zap_reports"
-
-                    // 2. Limpiar cualquier contenedor ZAP previo atascado
                     sh "docker rm -f zap-scanner || true"
 
-                    echo '🔥 Ejecutando ZAP...'
-                    // TRUCO: 
-                    // - Usamos --name zap-scanner para poder referenciarlo después.
-                    // - Usamos -v /zap/wrk (sin ruta host) para crear un volumen interno temporal donde ZAP pueda escribir.
-                    // - NO usamos --rm, para que el contenedor exista lo suficiente para copiar el archivo.
+                    echo '🔥 Ejecutando ZAP Scan...'
+                    // Usamos full-scan como pediste
                     sh """
                         docker run \
                         --name zap-scanner \
@@ -77,12 +73,35 @@ pipeline {
                         -I || true
                     """
                     
-                    echo '📥 Extrayendo reporte del contenedor...'
-                    // Copiamos el archivo desde dentro del contenedor hacia la carpeta de Jenkins
+                    echo '📥 Extrayendo reporte ZAP...'
                     sh "docker cp zap-scanner:/zap/wrk/zap_report.html ./zap_reports/zap_report.html"
-                    
-                    // Ahora sí, borramos el contenedor de ZAP
                     sh "docker rm zap-scanner"
+                }
+            }
+        }
+
+        stage('Análisis de Dependencias (Dependency Check)') {
+            steps {
+                script {
+                    echo '🔍 Analizando vulnerabilidades en librerías (SCA)...'
+                    
+                    // Creamos carpeta para el reporte
+                    sh "mkdir -p dependency-check-report"
+                    sh "chmod 777 dependency-check-report"
+
+                    // Ejecutamos el análisis usando Docker
+                    // Esto analizará tu archivo requirements.txt
+                    sh """
+                        docker run --rm \
+                        -u 0 \
+                        -v ${WORKSPACE}:/src \
+                        -v ${WORKSPACE}/dependency-check-report:/report \
+                        owasp/dependency-check \
+                        --scan /src \
+                        --format "HTML" \
+                        --project "Vulnerable App" \
+                        --out /report || true
+                    """
                 }
             }
         }
@@ -90,8 +109,11 @@ pipeline {
 
     post {
         always {
-            echo '📄 Archivando reporte...'
+            echo '📄 Archivando todos los reportes...'
+            // Reporte de ZAP
             archiveArtifacts artifacts: 'zap_reports/zap_report.html', allowEmptyArchive: true
+            // Reporte de Dependencias
+            archiveArtifacts artifacts: 'dependency-check-report/dependency-check-report.html', allowEmptyArchive: true
         }
     }
 }
