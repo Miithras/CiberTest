@@ -2,12 +2,40 @@ from flask import Flask, request, render_template_string, session, redirect, url
 import sqlite3
 import os
 import hashlib
-# Importación para monitorización
 from prometheus_flask_exporter import PrometheusMetrics
 
 app = Flask(__name__)
 
-# Configuración de métricas (Vital para Grafana)
+# --- CONFIGURACIÓN DE SEGURIDAD (SOLUCIONA RIESGOS MEDIOS/BAJOS DE ZAP) ---
+
+# 1. Protección de Cookies (Soluciona "Cookie No HttpOnly Flag" y "SameSite")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,  # Evita que JavaScript lea la cookie (Mitiga XSS)
+    SESSION_COOKIE_SAMESITE='Lax', # Protege contra CSRF básico
+    # SESSION_COOKIE_SECURE=True   # OJO: Solo descomentar si usas HTTPS. En localhost/Docker romperá el login.
+)
+
+# 2. Inyección de Cabeceras de Seguridad HTTP
+@app.after_request
+def add_security_headers(response):
+    # Soluciona "X-Content-Type-Options Header Missing"
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+
+    # Soluciona "Missing Anti-clickjacking Header"
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+
+    # Soluciona "Content Security Policy (CSP) Header Not Set"
+    # Permitimos scripts propios y el CDN de Bootstrap que usas en el HTML
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://maxcdn.bootstrapcdn.com; "
+        "style-src 'self' 'unsafe-inline' https://maxcdn.bootstrapcdn.com; "
+        "font-src 'self' https://maxcdn.bootstrapcdn.com; "
+        "img-src 'self' data:;"
+    )
+    return response
+# --------------------------------------------------------------------------
+
 metrics = PrometheusMetrics(app)
 metrics.info('app_info', 'Application info', version='1.0.3')
 
@@ -49,13 +77,10 @@ def login():
 
         conn = get_db_connection()
 
-        # --- CORRECCIÓN DE SEGURIDAD ---
-        # Se eliminó la lógica vulnerable que usaba .format()
-        # Ahora SIEMPRE se usa la consulta parametrizada (segura contra SQL Injection)
+        # Consulta segura (Parametrizada)
         query = "SELECT * FROM users WHERE username = ? AND password = ?"
         hashed_password = hash_password(password)
         user = conn.execute(query, (username, hashed_password)).fetchone()
-        # -------------------------------
 
         if user:
             session['user_id'] = user['id']
@@ -129,7 +154,6 @@ def dashboard():
         "SELECT comment FROM comments WHERE user_id = ?", (user_id,)).fetchall()
     conn.close()
 
-    # Nota: render_template_string escapa automáticamente las variables {{ }} protegiendo contra XSS básico
     return render_template_string('''
         <!doctype html>
         <html lang="en">
@@ -169,7 +193,6 @@ def submit_comment():
     user_id = session['user_id']
 
     conn = get_db_connection()
-    # Esta consulta ya era segura (parametrizada), se mantiene igual
     conn.execute(
         "INSERT INTO comments (user_id, comment) VALUES (?, ?)", (user_id, comment))
     conn.commit()
@@ -200,5 +223,4 @@ def admin():
     ''')
 
 if __name__ == '__main__':
-    # Se establece debug=False para producción y seguridad
     app.run(host='0.0.0.0', debug=False)
