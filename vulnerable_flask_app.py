@@ -2,24 +2,24 @@ from flask import Flask, request, render_template_string, session, redirect, url
 import sqlite3
 import os
 import hashlib
+# 1. Importación de la librería
 from prometheus_flask_exporter import PrometheusMetrics
 
 app = Flask(__name__)
+
+# 2. Configuración de métricas (TIENE QUE IR AQUÍ, ANTES DE LAS RUTAS)
 metrics = PrometheusMetrics(app)
 metrics.info('app_info', 'Application info', version='1.0.3')
 
 app.secret_key = os.urandom(24)
-
 
 def get_db_connection():
     conn = sqlite3.connect('example.db')
     conn.row_factory = sqlite3.Row
     return conn
 
-
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
-
 
 @app.route('/')
 def index():
@@ -41,7 +41,6 @@ def index():
         </html>
     ''')
 
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -50,7 +49,7 @@ def login():
 
         conn = get_db_connection()
 
-        # Inyección de SQL solo si se detecta un payload de inyección de SQL
+        # Vulnerabilidad intencional para la evaluación
         if "' OR '" in password:
             query = "SELECT * FROM users WHERE username = '{}' AND password = '{}'".format(
                 username, password)
@@ -121,7 +120,6 @@ def login():
         </html>
     ''')
 
-
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
@@ -163,7 +161,6 @@ def dashboard():
         </html>
     ''', user_id=user_id, comments=comments)
 
-
 @app.route('/submit_comment', methods=['POST'])
 def submit_comment():
     if 'user_id' not in session:
@@ -179,7 +176,6 @@ def submit_comment():
     conn.close()
 
     return redirect(url_for('dashboard'))
-
 
 @app.route('/admin')
 def admin():
@@ -203,6 +199,6 @@ def admin():
         </html>
     ''')
 
-
 if __name__ == '__main__':
+    # 3. Lanzamos la app
     app.run(host='0.0.0.0', debug=True)
